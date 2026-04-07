@@ -7,52 +7,37 @@ from past.builtins import xrange
 def softmax_loss_naive(W, X, y, reg):
     """
     Softmax loss function, naive implementation (with loops)
-
-    Inputs have dimension D, there are C classes, and we operate on minibatches
-    of N examples.
-
-    Inputs:
-    - W: A numpy array of shape (D, C) containing weights.
-    - X: A numpy array of shape (N, D) containing a minibatch of data.
-    - y: A numpy array of shape (N,) containing training labels; y[i] = c means
-      that X[i] has label c, where 0 <= c < C.
-    - reg: (float) regularization strength
-
-    Returns a tuple of:
-    - loss as single float
-    - gradient with respect to weights W; an array of same shape as W
     """
-    # Initialize the loss and gradient to zero.
     loss = 0.0
     dW = np.zeros_like(W)
 
-    # compute the loss and the gradient
-    num_classes = W.shape[1]
     num_train = X.shape[0]
+    num_classes = W.shape[1]
+
     for i in range(num_train):
         scores = X[i].dot(W)
-
-        # compute the probabilities in numerically stable way
+        # shape: (C,) 标签数量
         scores -= np.max(scores)
-        p = np.exp(scores)
-        p /= p.sum()  # normalize
-        logp = np.log(p)
+        # 数值稳定：减去分数最高位置的元素，防止指数爆炸[现在最大数字为e^0]
+        
+        exp_scores = np.exp(scores)
+        probs = exp_scores / np.sum(exp_scores)
+        # probability：输出Softmax的一系列概率
 
-        loss -= logp[y[i]]  # negative log probability is the loss
+        loss += -np.log(probs[y[i]])
+        # 损失函数取-log值
 
+        for j in range(num_classes):
+            if j == y[i]:
+                dW[:, j] += (probs[j] - 1) * X[i]
+            else:
+                dW[:, j] += probs[j] * X[i]
 
-    # normalized hinge loss plus regularization
-    loss = loss / num_train + reg * np.sum(W * W)
+    loss /= num_train
+    dW /= num_train
 
-    #############################################################################
-    # TODO:                                                                     #
-    # Compute the gradient of the loss function and store it dW.                #
-    # Rather that first computing the loss and then computing the derivative,   #
-    # it may be simpler to compute the derivative at the same time that the     #
-    # loss is being computed. As a result you may need to modify some of the    #
-    # code above to compute the gradient.                                       #
-    #############################################################################
-
+    loss += reg * np.sum(W * W)
+    dW += 2 * reg * W
 
     return loss, dW
 
@@ -67,13 +52,28 @@ def softmax_loss_vectorized(W, X, y, reg):
     loss = 0.0
     dW = np.zeros_like(W)
 
-
     #############################################################################
     # TODO:                                                                     #
     # Implement a vectorized version of the softmax loss, storing the           #
     # result in loss.                                                           #
     #############################################################################
+    num_train = X.shape[0]
+    scores = X @ W # 矩阵乘法，形状(N,C)
+    scores -= np.max(scores, axis=1, keepdims=1)
+    # 按行减去最大值（防止数值溢出）
+    exp_scores = np.exp(scores)
+    sum_exp_scores = np.sum(exp_scores, axis=1, keepdims=1)
+    # 按行计算指数和
+    probs = exp_scores / sum_exp_scores
+    # 得出概率
+    correct_probs = probs[np.arange(num_train), y]
+    # 按高级索引，拿到每行（就是每张图片）对应正确标签下的概率，并将其写入一个数组中
+    loss = np.sum(-np.log(correct_probs)) / num_train
+    # 损失函数是每行Softmax输出的负对数之和，再除以样本数
+    probs[np.arange(num_train), y] -= 1
 
+    dW = X.T @ probs
+    dW /= num_train
 
     #############################################################################
     # TODO:                                                                     #
@@ -85,5 +85,7 @@ def softmax_loss_vectorized(W, X, y, reg):
     # loss.                                                                     #
     #############################################################################
 
+    loss += reg * np.sum(W * W)
+    dW += 2 * reg * W
 
     return loss, dW
